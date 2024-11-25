@@ -35,6 +35,7 @@
             Download Results as CSV
         </button>
     </div>
+    <button onclick="logout()" style="position: absolute; top: 10px; right: 10px;">Logout</button>
     <script>
         document.getElementById('bulkUrlForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -95,6 +96,11 @@
                 console.error('Error downloading CSV:', error);
             }
         });
+
+        function logout() {
+            document.cookie = "X-API-Key=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+            window.location.href = '/login';
+        }
     </script>
 </body>
 </html>

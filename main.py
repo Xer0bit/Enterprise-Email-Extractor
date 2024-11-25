@@ -8,11 +8,13 @@ from urllib.parse import urljoin, urlparse
 from typing import List, Set, Dict
 from concurrent.futures import ThreadPoolExecutor
 import validators
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi.security import APIKeyHeader
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse, RedirectResponse
 from pydantic import BaseModel, AnyHttpUrl, ValidationError
 import uvicorn
+from functools import wraps
 
 # Set up logging
 logging.basicConfig(
@@ -109,6 +111,20 @@ class URLBulkInput(BaseModel):
 class BulkEmailResponse(BaseModel):
     results: Dict[str, Dict[str, object]]
 
+SECRET_WORD = "your_secret_word_here"  # Change this to your desired secret word
+API_KEY_NAME = "X-API-Key"
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+def require_auth(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        request = kwargs.get('request')
+        api_key = request.cookies.get(API_KEY_NAME)
+        if not api_key or api_key != SECRET_WORD:
+            return RedirectResponse(url="/login")
+        return await func(*args, **kwargs)
+    return wrapper
+
 app = FastAPI(
     title="Bulk Email Extractor API",
     description="API to extract business emails from multiple websites",
@@ -118,8 +134,173 @@ app = FastAPI(
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+@app.get("/login", response_class=HTMLResponse)
+async def get_login():
+    return """
+    <html>
+        <head>
+            <title>Login - Email Extractor</title>
+            <style>
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                    font-family: 'Segoe UI', system-ui, sans-serif;
+                }
+                body {
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                }
+                .container {
+                    background: white;
+                    padding: 2.5rem;
+                    border-radius: 12px;
+                    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+                    width: 100%;
+                    max-width: 400px;
+                    margin: 1rem;
+                }
+                h2 {
+                    color: #2d3748;
+                    margin-bottom: 1.5rem;
+                    font-size: 1.5rem;
+                    text-align: center;
+                }
+                .input-group {
+                    margin-bottom: 1.5rem;
+                }
+                input {
+                    width: 100%;
+                    padding: 0.75rem 1rem;
+                    border: 2px solid #e2e8f0;
+                    border-radius: 8px;
+                    font-size: 1rem;
+                    transition: all 0.3s ease;
+                }
+                input:focus {
+                    outline: none;
+                    border-color: #667eea;
+                    box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+                }
+                button {
+                    width: 100%;
+                    padding: 0.75rem 1rem;
+                    background: #667eea;
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    font-size: 1rem;
+                    font-weight: 500;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                }
+                button:hover {
+                    background: #5a67d8;
+                }
+                button:active {
+                    transform: scale(0.98);
+                }
+                .error {
+                    color: #e53e3e;
+                    margin-top: 0.5rem;
+                    font-size: 0.875rem;
+                    display: none;
+                }
+                button.loading {
+                    background: #cbd5e0;
+                    cursor: not-allowed;
+                }
+                .loading-spinner {
+                    display: none;
+                    width: 20px;
+                    height: 20px;
+                    border: 3px solid #f3f3f3;
+                    border-top: 3px solid #667eea;
+                    border-radius: 50%;
+                    animation: spin 1s linear infinite;
+                    margin: 0 auto;
+                }
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2>Welcome Back</h2>
+                <form id="loginForm">
+                    <div class="input-group">
+                        <input type="password" 
+                               id="secretWord" 
+                               placeholder="Enter secret word"
+                               autocomplete="current-password">
+                        <div class="error" id="errorMessage">Invalid secret word</div>
+                    </div>
+                    <button type="submit" id="submitButton">
+                        <span>Login</span>
+                        <div class="loading-spinner" id="spinner"></div>
+                    </button>
+                </form>
+            </div>
+            <script>
+                const form = document.getElementById('loginForm');
+                const button = document.getElementById('submitButton');
+                const spinner = document.getElementById('spinner');
+                const errorMessage = document.getElementById('errorMessage');
+
+                form.onsubmit = async (e) => {
+                    e.preventDefault();
+                    
+                    // Reset state
+                    errorMessage.style.display = 'none';
+                    button.classList.add('loading');
+                    button.querySelector('span').style.display = 'none';
+                    spinner.style.display = 'block';
+                    
+                    try {
+                        const response = await fetch('/verify-login', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                secret: document.getElementById('secretWord').value
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            window.location.href = '/';
+                        } else {
+                            throw new Error('Invalid secret word');
+                        }
+                    } catch (error) {
+                        errorMessage.style.display = 'block';
+                        button.classList.remove('loading');
+                        button.querySelector('span').style.display = 'block';
+                        spinner.style.display = 'none';
+                    }
+                };
+            </script>
+        </body>
+    </html>
+    """
+
+@app.post("/verify-login")
+async def verify_login(request: Request):
+    data = await request.json()
+    if data.get('secret') == SECRET_WORD:
+        response = JSONResponse({"status": "success"})
+        response.set_cookie(API_KEY_NAME, SECRET_WORD)
+        return response
+    raise HTTPException(status_code=401, detail="Invalid secret word")
+
 @app.get("/", response_class=HTMLResponse)
-async def get_web_interface():
+@require_auth
+async def get_web_interface(request: Request):
     with open("static/index.html") as f:
         return HTMLResponse(content=f.read())
 
@@ -136,7 +317,8 @@ async def validation_exception_handler(request: Request, exc: ValidationError):
     )
 
 @app.post("/extract-emails-bulk/", response_model=BulkEmailResponse)
-async def extract_bulk_urls(urls_input: URLBulkInput):
+@require_auth
+async def extract_bulk_urls(request: Request, urls_input: URLBulkInput):
     # Validate URLs manually
     valid_urls = []
     for url in urls_input.urls:
@@ -156,7 +338,8 @@ async def extract_bulk_urls(urls_input: URLBulkInput):
     return BulkEmailResponse(results=results)
 
 @app.get("/download-csv/")
-async def download_csv():
+@require_auth
+async def download_csv(request: Request):
     logger.info("Generating CSV file for download")
     
     output = StringIO()
