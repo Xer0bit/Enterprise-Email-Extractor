@@ -259,7 +259,7 @@ async def get_login():
                     </button>
                 </form>
                 <div class="credits">
-                    Developed by <a href="https://github.com/xer0bit">xer0bit</a> Sameer samiullah
+                    Developed by <a href="https://github.com/xer0bit">xer0bit</a> 
                 </div>
             </div>
             <script>
