@@ -227,6 +227,19 @@ async def get_login():
                     0% { transform: rotate(0deg); }
                     100% { transform: rotate(360deg); }
                 }
+                .credits {
+                    text-align: center;
+                    margin-top: 1.5rem;
+                    color: #718096;
+                    font-size: 0.875rem;
+                }
+                .credits a {
+                    color: #667eea;
+                    text-decoration: none;
+                }
+                .credits a:hover {
+                    text-decoration: underline;
+                }
             </style>
         </head>
         <body>
@@ -245,6 +258,9 @@ async def get_login():
                         <div class="loading-spinner" id="spinner"></div>
                     </button>
                 </form>
+                <div class="credits">
+                    Developed by <a href="https://github.com/xer0bit">xer0bit</a> Sameer samiullah
+                </div>
             </div>
             <script>
                 const form = document.getElementById('loginForm');
