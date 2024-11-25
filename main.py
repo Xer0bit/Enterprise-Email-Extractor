@@ -129,7 +129,7 @@ class URLBulkInput(BaseModel):
 class BulkEmailResponse(BaseModel):
     results: Dict[str, Dict[str, object]]
 
-SECRET_WORD = "admin"  # Change this to your desired secret word
+SECRET_WORD = ""  # Change this to your desired secret word
 API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
