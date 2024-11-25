@@ -73,9 +73,13 @@ def extract_data_from_url(url: str) -> dict:
 
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code != 200:
+            logger.error(f"Failed to retrieve {url}: Status code {response.status_code}")
+            return data
+        response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Extract emails
+        logger.info(f"response: {response.text}") 
+        # Extract emails from the main page
         text_content = soup.get_text()
         email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
         found_emails = re.findall(email_pattern, text_content)
@@ -83,6 +87,20 @@ def extract_data_from_url(url: str) -> dict:
         
         # Extract business name
         data['business_name'] = extract_business_name(url, soup)
+        
+        # Check for additional pages
+        additional_pages = ['contact', 'about', 'contact-us']
+        for page in additional_pages:
+            page_url = urljoin(url, page)
+            if validators.url(page_url):
+                try:
+                    page_response = requests.get(page_url, headers=headers, timeout=10)
+                    page_soup = BeautifulSoup(page_response.text, 'html.parser')
+                    page_text_content = page_soup.get_text()
+                    found_emails = re.findall(email_pattern, page_text_content)
+                    data['emails'].update(found_emails)
+                except Exception as e:
+                    logger.error(f"Error processing {page_url}: {str(e)}")
         
         logger.info(f"Found {len(data['emails'])} emails and business name '{data['business_name']}' from {url}")
 
@@ -111,7 +129,7 @@ class URLBulkInput(BaseModel):
 class BulkEmailResponse(BaseModel):
     results: Dict[str, Dict[str, object]]
 
-SECRET_WORD = "your_secret_word_here"  # Change this to your desired secret word
+SECRET_WORD = "admin"  # Change this to your desired secret word
 API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
@@ -136,174 +154,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/login", response_class=HTMLResponse)
 async def get_login():
-    return """
-    <html>
-        <head>
-            <title>Login - Email Extractor</title>
-            <style>
-                * {
-                    margin: 0;
-                    padding: 0;
-                    box-sizing: border-box;
-                    font-family: 'Segoe UI', system-ui, sans-serif;
-                }
-                body {
-                    min-height: 100vh;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                }
-                .container {
-                    background: white;
-                    padding: 2.5rem;
-                    border-radius: 12px;
-                    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-                    width: 100%;
-                    max-width: 400px;
-                    margin: 1rem;
-                }
-                h2 {
-                    color: #2d3748;
-                    margin-bottom: 1.5rem;
-                    font-size: 1.5rem;
-                    text-align: center;
-                }
-                .input-group {
-                    margin-bottom: 1.5rem;
-                }
-                input {
-                    width: 100%;
-                    padding: 0.75rem 1rem;
-                    border: 2px solid #e2e8f0;
-                    border-radius: 8px;
-                    font-size: 1rem;
-                    transition: all 0.3s ease;
-                }
-                input:focus {
-                    outline: none;
-                    border-color: #667eea;
-                    box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
-                }
-                button {
-                    width: 100%;
-                    padding: 0.75rem 1rem;
-                    background: #667eea;
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                    font-size: 1rem;
-                    font-weight: 500;
-                    cursor: pointer;
-                    transition: all 0.3s ease;
-                }
-                button:hover {
-                    background: #5a67d8;
-                }
-                button:active {
-                    transform: scale(0.98);
-                }
-                .error {
-                    color: #e53e3e;
-                    margin-top: 0.5rem;
-                    font-size: 0.875rem;
-                    display: none;
-                }
-                button.loading {
-                    background: #cbd5e0;
-                    cursor: not-allowed;
-                }
-                .loading-spinner {
-                    display: none;
-                    width: 20px;
-                    height: 20px;
-                    border: 3px solid #f3f3f3;
-                    border-top: 3px solid #667eea;
-                    border-radius: 50%;
-                    animation: spin 1s linear infinite;
-                    margin: 0 auto;
-                }
-                @keyframes spin {
-                    0% { transform: rotate(0deg); }
-                    100% { transform: rotate(360deg); }
-                }
-                .credits {
-                    text-align: center;
-                    margin-top: 1.5rem;
-                    color: #718096;
-                    font-size: 0.875rem;
-                }
-                .credits a {
-                    color: #667eea;
-                    text-decoration: none;
-                }
-                .credits a:hover {
-                    text-decoration: underline;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h2>Welcome Back</h2>
-                <form id="loginForm">
-                    <div class="input-group">
-                        <input type="password" 
-                               id="secretWord" 
-                               placeholder="Enter secret word"
-                               autocomplete="current-password">
-                        <div class="error" id="errorMessage">Invalid secret word</div>
-                    </div>
-                    <button type="submit" id="submitButton">
-                        <span>Login</span>
-                        <div class="loading-spinner" id="spinner"></div>
-                    </button>
-                </form>
-                <div class="credits">
-                    Developed by <a href="https://github.com/xer0bit">xer0bit</a> 
-                </div>
-            </div>
-            <script>
-                const form = document.getElementById('loginForm');
-                const button = document.getElementById('submitButton');
-                const spinner = document.getElementById('spinner');
-                const errorMessage = document.getElementById('errorMessage');
-
-                form.onsubmit = async (e) => {
-                    e.preventDefault();
-                    
-                    // Reset state
-                    errorMessage.style.display = 'none';
-                    button.classList.add('loading');
-                    button.querySelector('span').style.display = 'none';
-                    spinner.style.display = 'block';
-                    
-                    try {
-                        const response = await fetch('/verify-login', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                secret: document.getElementById('secretWord').value
-                            })
-                        });
-                        
-                        if (response.ok) {
-                            window.location.href = '/';
-                        } else {
-                            throw new Error('Invalid secret word');
-                        }
-                    } catch (error) {
-                        errorMessage.style.display = 'block';
-                        button.classList.remove('loading');
-                        button.querySelector('span').style.display = 'block';
-                        spinner.style.display = 'none';
-                    }
-                };
-            </script>
-        </body>
-    </html>
-    """
+    with open("static/login.html") as f:
+        return HTMLResponse(content=f.read())
 
 @app.post("/verify-login")
 async def verify_login(request: Request):
