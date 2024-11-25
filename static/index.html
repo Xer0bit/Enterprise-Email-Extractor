@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise Email Extractor</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="theme-color" content="#0f172a">
+</head>
+<body>
+    <div class="container">
+        <h1>✨ Enterprise Email Extractor</h1>
+        
+        <div class="form-section">
+            <form id="bulkUrlForm">
+                <textarea id="bulkUrls" placeholder="Enter your target URLs (one per line)&#10;Example:&#10;https://example1.com&#10;https://example2.com" required></textarea>
+                <button type="submit">Extract Emails</button>
+            </form>
+            
+            <div class="loading" style="display: none;">
+                <div class="loading-spinner"></div>
+                <p>Processing URLs, please wait...</p>
+                <small style="color: #94a3b8;">This may take a few moments</small>
+            </div>
+            
+            <div class="progress-log" id="progressLog" style="display: none;">
+                <!-- Progress logs will be added here -->
+            </div>
+            
+            <div id="bulkResult" class="result"></div>
+        </div>
+
+        <button id="downloadBtn" style="display: none;">
+            Download Results as CSV
+        </button>
+    </div>
+    <script>
+        document.getElementById('bulkUrlForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const urls = document.getElementById('bulkUrls').value
+                .split('\n')
+                .map(url => url.trim())
+                .filter(url => url !== '');
+            const resultDiv = document.getElementById('bulkResult');
+            const loadingDiv = document.querySelector('.loading');
+            const submitBtn = e.target.querySelector('button');
+            
+            loadingDiv.style.display = 'block';
+            resultDiv.innerHTML = '';
+            submitBtn.disabled = true;
+            
+            try {
+                const response = await fetch('/extract-emails-bulk/', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({urls: urls})
+                });
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to process URLs');
+                }
+                const data = await response.json();
+                let html = '<h3>Results:</h3>';
+                for (const [url, result] of Object.entries(data.results)) {
+                    html += `<div class="bulk-result">
+                        <strong>${url}</strong>
+                        <p class="business-name">Business Name: ${result.business_name || 'Not found'}</p>
+                        <p>Emails: ${result.emails.length ? Array.from(result.emails).join('<br>') : 'No emails found'}</p>
+                    </div>`;
+                }
+                resultDiv.innerHTML = html;
+                document.getElementById('downloadBtn').style.display = 'block';
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            } finally {
+                loadingDiv.style.display = 'none';
+                submitBtn.disabled = false;
+            }
+        });
+
+        document.getElementById('downloadBtn').addEventListener('click', async () => {
+            try {
+                const response = await fetch('/download-csv/');
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'extracted_emails.csv';
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+            } catch (error) {
+                console.error('Error downloading CSV:', error);
+            }
+        });
+    </script>
+</body>
+</html>
