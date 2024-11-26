@@ -16,8 +16,8 @@ A FastAPI application that extracts business emails and business names from webs
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/email-extractor.git
-cd email-extractor
+https://github.com/Xer0bit/Enterprise-Email-Extractor.git
+cd Enterprise-Email-Extractor
 ```
 
 2. Create a virtual environment (optional but recommended):
